@@ -1,15 +1,16 @@
 import type { MetadataRoute } from "next";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Anotador de Jogo",
-    short_name: "Anotador",
-    description: "Anotações de jogo ao vivo para narradores de futebol",
+    name: PRODUCT_NAME,
+    short_name: PRODUCT_NAME,
+    description: PRODUCT_TAGLINE,
     lang: "pt-BR",
     start_url: "/",
     display: "standalone",
-    background_color: "#000000",
-    theme_color: "#000000",
+    background_color: "#07090b",
+    theme_color: "#07090b",
     icons: [
       { src: "/icons/192", sizes: "192x192", type: "image/png" },
       { src: "/icons/512", sizes: "512x512", type: "image/png" },

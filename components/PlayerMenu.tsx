@@ -19,7 +19,7 @@ export interface PlayerMenuActions {
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="ml-1 hidden rounded-md border border-white/20 px-1.5 text-xs font-medium text-white/50 lg:inline">
+    <kbd className="ml-1 hidden rounded-md border border-line-strong px-1.5 text-xs font-medium text-faint lg:inline">
       {children}
     </kbd>
   );

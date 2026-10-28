@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { AddPlayerForm } from "./LineupForm";
-import { EventList } from "./EventList";
 import { PlayerMenu, type MenuView } from "./PlayerMenu";
 import { PlayerRow } from "./PlayerRow";
 import { Scoreboard } from "./Scoreboard";
 import { ShareSheet } from "./ShareSheet";
 import { SummarySheet } from "./SummarySheet";
-import { Button, EmptyState, LinkButton, Sheet, SyncBadge, Tabs, Toast } from "./ui";
+import { Timeline } from "./Timeline";
+import { Button, Card, EmptyState, LinkButton, Sheet, Tabs, TeamCrest, Toast } from "./ui";
 import { activeEvents, currentMinute, describeEvent, lastUndoable, playersOf, tally, teamName } from "@/lib/game-logic";
 import { useWakeLock } from "@/lib/hooks";
+import { usePublishSync } from "@/lib/sync-bus";
 import { useMatchStore } from "@/lib/use-match-store";
 import type { MatchState, PlayerView, Side } from "@/lib/types";
 
@@ -21,12 +21,14 @@ const BROADCAST_KEY = "broadcast-mode";
 
 export function GameScreen({ initial }: { initial: MatchState }) {
   const { state, dispatch, sync, pending, notice, clearNotice } = useMatchStore(initial);
+  usePublishSync(sync, pending);
   useWakeLock();
 
   const [tab, setTab] = useState<Side>("home");
   const [menu, setMenu] = useState<{ id: string; view: MenuView } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [broadcast, setBroadcast] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -78,122 +80,141 @@ export function GameScreen({ initial }: { initial: MatchState }) {
   // Alvo = jogador do menu aberto ou a linha com foco.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const t = e.target as HTMLElement | null;
-    if (t && ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)) return;
-    const k = e.key.toLowerCase();
-    if (k === "z") {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)) return;
+      const k = e.key.toLowerCase();
+      if (k === "z") {
+        e.preventDefault();
+        return undo();
+      }
+      if (menu && menu.view !== "menu") return;
+      const id = menu?.id ?? (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-player-id]")?.dataset.playerId;
+      const p = id ? byId.get(id) : undefined;
+      if (!p || p.status !== "on_field" || !["s", "a", "v", "g"].includes(k)) return;
       e.preventDefault();
-      return undo();
-    }
-    if (menu && menu.view !== "menu") return;
-    const id = menu?.id ?? (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-player-id]")?.dataset.playerId;
-    const p = id ? byId.get(id) : undefined;
-    if (!p || p.status !== "on_field" || !["s", "a", "v", "g"].includes(k)) return;
-    e.preventDefault();
-    if (k === "s") setMenu({ id: p.id, view: "sub" });
-    else if (k === "a") yellow(p);
-    else if (k === "v") record("red", p);
-    else record("goal", p);
+      if (k === "s") setMenu({ id: p.id, view: "sub" });
+      else if (k === "a") yellow(p);
+      else if (k === "v") record("red", p);
+      else record("goal", p);
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [menu, byId, undo, yellow, record]);
 
-  const sides: { side: Side; name: string }[] = [
-    { side: "home", name: match.home_name },
-    { side: "away", name: match.away_name },
+  const sides: { side: Side; name: string; role: string }[] = [
+    { side: "home", name: match.home_name, role: "Casa" },
+    { side: "away", name: match.away_name, role: "Visitante" },
   ];
   const openMenu = (p: PlayerView) => setMenu({ id: p.id, view: "menu" });
   const finished = match.status === "finished";
 
   return (
-    <div data-broadcast={broadcast} className="min-h-screen">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-36 pt-3">
-        <header className="flex flex-wrap items-center justify-between gap-2">
-          <Link href="/" className="hide-in-broadcast soft inline-flex min-h-11 items-center">
-            ← Jogos
-          </Link>
-          <div className="flex flex-wrap items-center gap-2">
-            <SyncBadge status={sync} pending={pending} />
-            <Button variant={broadcast ? "primary" : "default"} aria-pressed={broadcast} onClick={toggleBroadcast} className="!min-h-11">
-              📡 Transmissão
-            </Button>
-          </div>
-        </header>
-
+    <div data-broadcast={broadcast}>
+      <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 pb-40 pt-5">
         <Scoreboard
           state={state}
           onClock={(action, seconds) => dispatch({ kind: "clock", action, at: new Date().toISOString(), seconds })}
         />
 
-        {(match.referee || match.assistants || match.competition) && (
-          <p className="hide-in-broadcast soft text-center text-base">
-            {match.competition && <span>{match.competition} · </span>}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="hide-in-broadcast soft min-w-0 flex-1 basis-60 text-[15px]">
+            {match.competition && <span className="font-semibold text-ink">{match.competition} · </span>}
             Arbitragem: {[match.referee, match.assistants].filter(Boolean).join(" · ") || "não informada"}
           </p>
-        )}
-
-        <div className="hide-in-broadcast flex flex-wrap gap-2">
-          <LinkButton href={`/jogos/${match.id}/escalacao`} className="!min-h-11">
-            Escalação
-          </LinkButton>
-          <Button className="!min-h-11" onClick={() => setDialog({ kind: "share" })}>
-            🔗 Link ao vivo
-          </Button>
-          <Button className="!min-h-11" onClick={() => setDialog({ kind: "summary" })}>
-            📝 Gerar resumo
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <LinkButton href={`/jogos/${match.id}/escalacao`} className="hide-in-broadcast !min-h-12">
+              Escalação
+            </LinkButton>
+            <Button className="hide-in-broadcast" onClick={() => setDialog({ kind: "share" })}>
+              🔗 Link ao vivo
+            </Button>
+            <Button className="hide-in-broadcast" onClick={() => setDialog({ kind: "summary" })}>
+              📝 Resumo
+            </Button>
+            <Button variant={broadcast ? "primary" : "default"} aria-pressed={broadcast} onClick={toggleBroadcast}>
+              📡 Transmissão
+            </Button>
+          </div>
         </div>
 
         <Tabs value={tab} onChange={setTab} items={sides.map((s) => ({ value: s.side, label: s.name }))} />
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {sides.map(({ side, name }) => {
-            const { field, bench, out } = playersOf(state, side);
-            return (
-              <section key={side} className={`flex flex-col gap-2 ${tab === side ? "block" : "hidden md:flex"}`} aria-label={name}>
-                <h2 className="mb-1 hidden border-b border-white/15 pb-2 text-2xl font-bold md:block">{name}</h2>
-                {field.length === 0 && <EmptyState>Nenhum titular. Cadastre a escalação.</EmptyState>}
-                {field.map((p) => (
-                  <PlayerRow
-                    key={p.id}
-                    player={p}
-                    replacedName={p.replaced_player_id ? byId.get(p.replaced_player_id)?.name : null}
-                    tally={tally(active, p.id)}
-                    onOpen={() => openMenu(p)}
-                  />
-                ))}
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+          <div className="grid min-w-0 flex-1 gap-5 md:grid-cols-2">
+            {sides.map(({ side, name, role }) => {
+              const { field, bench, out } = playersOf(state, side);
+              return (
+                <section key={side} className={tab === side ? "block" : "hidden md:block"} aria-label={name}>
+                  <Card className="flex flex-col gap-2 p-3 md:p-4">
+                    <div className="mb-1 flex items-center gap-3 border-b border-line pb-3">
+                      <TeamCrest name={name} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <p className="label">{role}</p>
+                        <h2 className="truncate text-xl font-bold">{name}</h2>
+                      </div>
+                      <span className="tnum text-sm font-semibold text-faint">{field.length} em campo</span>
+                    </div>
 
-                {out.length > 0 && (
-                  <div className="hide-in-broadcast mt-3 flex flex-col gap-2">
-                    <span className="label">Substituídos</span>
-                    {out.map((p) => (
-                      <PlayerRow key={p.id} player={p} struck muted tally={tally(active, p.id)} onOpen={() => openMenu(p)} />
+                    {field.length === 0 && (
+                      <EmptyState
+                        compact
+                        title="Sem titulares"
+                        action={
+                          <LinkButton href={`/jogos/${match.id}/escalacao`} variant="primary">
+                            Cadastrar escalação
+                          </LinkButton>
+                        }
+                      >
+                        Cadastre os jogadores para começar a anotar.
+                      </EmptyState>
+                    )}
+                    {field.map((p) => (
+                      <PlayerRow
+                        key={p.id}
+                        player={p}
+                        selected={menu?.id === p.id}
+                        replacedName={p.replaced_player_id ? byId.get(p.replaced_player_id)?.name : null}
+                        tally={tally(active, p.id)}
+                        onOpen={() => openMenu(p)}
+                      />
                     ))}
-                  </div>
-                )}
-                {bench.length > 0 && (
-                  <div className="hide-in-broadcast mt-3 flex flex-col gap-2">
-                    <span className="label">Reservas</span>
-                    {bench.map((p) => (
-                      <PlayerRow key={p.id} player={p} muted tally={tally(active, p.id)} onOpen={() => openMenu(p)} />
-                    ))}
-                  </div>
-                )}
-                <Button variant="ghost" className="hide-in-broadcast mt-2 !justify-start" onClick={() => setDialog({ kind: "add", side })}>
-                  + Adicionar jogador
-                </Button>
-              </section>
-            );
-          })}
+
+                    {out.length > 0 && (
+                      <div className="hide-in-broadcast mt-3 flex flex-col gap-1.5">
+                        <span className="label">Substituídos</span>
+                        {out.map((p) => (
+                          <PlayerRow key={p.id} player={p} struck muted tally={tally(active, p.id)} onOpen={() => openMenu(p)} />
+                        ))}
+                      </div>
+                    )}
+                    {bench.length > 0 && (
+                      <div className="hide-in-broadcast mt-3 flex flex-col gap-1.5">
+                        <span className="label">Reservas</span>
+                        {bench.map((p) => (
+                          <PlayerRow key={p.id} player={p} muted tally={tally(active, p.id)} onOpen={() => openMenu(p)} />
+                        ))}
+                      </div>
+                    )}
+                    <Button variant="ghost" className="hide-in-broadcast mt-2 !justify-start" onClick={() => setDialog({ kind: "add", side })}>
+                      + Adicionar jogador
+                    </Button>
+                  </Card>
+                </section>
+              );
+            })}
+          </div>
+
+          <Timeline state={state} />
         </div>
 
-        <EventList state={state} />
-
-        <div className="hide-in-broadcast">
+        <div className="hide-in-broadcast flex justify-center pt-2">
           {finished ? (
-            <Button onClick={() => dispatch({ kind: "set_status", status: "live", at: new Date().toISOString() })}>Reabrir jogo</Button>
+            <Button
+              onClick={() => dispatch({ kind: "set_status", status: "live", at: new Date().toISOString() })}
+            >
+              Reabrir jogo
+            </Button>
           ) : match.status === "live" ? (
             <Button variant="danger" onClick={() => setDialog({ kind: "finish" })}>
               Encerrar jogo
@@ -203,10 +224,11 @@ export function GameScreen({ initial }: { initial: MatchState }) {
       </main>
 
       {/* Barra fixa: desfazer sempre à mão */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/90 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3">
-          <Button variant="danger" className="!min-h-14 shrink-0 !text-lg" disabled={!last} onClick={undo}>
-            ↩ Desfazer último evento <kbd className="hidden rounded border border-red-300/40 px-1.5 text-xs lg:inline">Z</kbd>
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/85 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1200px] items-center gap-3">
+          <Button variant="danger" className="!min-h-14 shrink-0 !text-[17px]" disabled={!last} onClick={undo}>
+            ↩ Desfazer último evento{" "}
+            <kbd className="hidden rounded border border-red-300/40 px-1.5 text-xs lg:inline">Z</kbd>
           </Button>
           <p className="soft hidden min-w-0 flex-1 truncate sm:block">{last ? describeEvent(state, last) : "Nenhum evento para desfazer"}</p>
         </div>
@@ -258,13 +280,14 @@ export function GameScreen({ initial }: { initial: MatchState }) {
       )}
       {dialog?.kind === "finish" && (
         <Sheet title="Encerrar jogo?" onClose={() => setDialog(null)}>
-          <p>O cronômetro para e o jogo aparece como encerrado. Dá para reabrir depois.</p>
+          <p className="soft">O cronômetro para e o jogo aparece como encerrado. Dá para reabrir depois.</p>
           <Button
             variant="primary"
             className="!min-h-14"
             onClick={() => {
               dispatch({ kind: "set_status", status: "finished", at: new Date().toISOString() });
               setDialog(null);
+              setSuccess("Jogo encerrado.");
             }}
           >
             Encerrar
@@ -275,6 +298,7 @@ export function GameScreen({ initial }: { initial: MatchState }) {
         </Sheet>
       )}
       {notice && <Toast message={notice} onClose={clearNotice} />}
+      {success && !notice && <Toast tone="success" message={success} onClose={() => setSuccess(null)} />}
     </div>
   );
 }

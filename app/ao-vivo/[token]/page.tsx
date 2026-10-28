@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { GameSkeleton } from "@/components/Skeletons";
 import { notFound } from "next/navigation";
 import { PublicScreen } from "@/components/PublicScreen";
 import { getViewStateByToken } from "@/lib/data";
@@ -12,7 +13,7 @@ async function Content({ params }: { params: Promise<{ token: string }> }) {
 
 export default function Page({ params }: { params: Promise<{ token: string }> }) {
   return (
-    <Suspense fallback={<p className="soft p-6">Carregando jogo…</p>}>
+    <Suspense fallback={<GameSkeleton />}>
       <Content params={params} />
     </Suspense>
   );

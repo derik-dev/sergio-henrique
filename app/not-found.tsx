@@ -1,13 +1,18 @@
-import { LinkButton } from "@/components/ui";
+import { EmptyState, LinkButton } from "@/components/ui";
 
 export default function NotFound() {
   return (
-    <main className="mx-auto flex max-w-md flex-col gap-4 px-4 py-16 text-center">
-      <h1 className="text-2xl font-bold">Jogo não encontrado</h1>
-      <p className="soft">Confira o link. Ele precisa estar completo.</p>
-      <LinkButton href="/" variant="primary">
-        Ver jogos
-      </LinkButton>
+    <main className="mx-auto flex w-full max-w-xl flex-col px-4 py-16">
+      <EmptyState
+        title="Jogo não encontrado"
+        action={
+          <LinkButton href="/" variant="primary">
+            Ver jogos
+          </LinkButton>
+        }
+      >
+        Confira o link: ele precisa estar completo.
+      </EmptyState>
     </main>
   );
 }

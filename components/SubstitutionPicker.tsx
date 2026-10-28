@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, EmptyState } from "./ui";
+import { Button, EmptyState, ShirtBadge } from "./ui";
 import type { PlayerView } from "@/lib/types";
 
 export function SubstitutionPicker({
@@ -17,14 +17,18 @@ export function SubstitutionPicker({
   return (
     <div className="flex flex-col gap-2">
       <p className="soft">
-        Sai <strong className="text-white">{out.shirt_number} {out.name}</strong>. Quem entra?
+        Sai <strong className="text-ink">{out.shirt_number} {out.name}</strong>. Quem entra?
       </p>
-      {bench.length === 0 && <EmptyState>Sem reservas disponíveis.</EmptyState>}
+      {bench.length === 0 && <EmptyState compact title="Sem reservas">Cadastre reservas na escalação para fazer substituições.</EmptyState>}
       {bench.map((p) => (
-        <Button key={p.id} onClick={() => onPick(p.id)} className="!justify-start gap-4 !text-xl">
-          <span className="w-10 text-right tabular-nums soft">{p.shirt_number}</span>
+        <button
+          key={p.id}
+          onClick={() => onPick(p.id)}
+          className="flex min-h-14 items-center gap-3 rounded-card border border-line bg-s2 px-3 text-left text-[18px] font-semibold transition-[transform,background-color,border-color] duration-150 hover:border-accent/40 hover:bg-s3 active:scale-[0.985]"
+        >
+          <ShirtBadge number={p.shirt_number} />
           {p.name}
-        </Button>
+        </button>
       ))}
       <Button variant="ghost" onClick={onBack}>
         Voltar

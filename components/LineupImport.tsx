@@ -47,11 +47,13 @@ export function LineupImport({
   matchId,
   existing,
   dispatch,
+  onImported,
   onClose,
 }: {
   matchId: string;
   existing: PlayerView[];
   dispatch: (op: Op) => void;
+  onImported?: (count: number) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState("");
@@ -113,6 +115,7 @@ export function LineupImport({
         ...(draft.assistants.trim() && { assistants: draft.assistants.trim() }),
       });
     }
+    onImported?.(draft.home.rows.length + draft.away.rows.length);
     onClose();
   }
 

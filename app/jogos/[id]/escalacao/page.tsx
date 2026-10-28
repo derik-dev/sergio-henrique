@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { LineupSkeleton } from "@/components/Skeletons";
 import { notFound } from "next/navigation";
 import { LineupScreen } from "@/components/LineupScreen";
 import { getMatchState } from "@/lib/data";
@@ -12,7 +13,7 @@ async function Content({ params }: { params: Promise<{ id: string }> }) {
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <Suspense fallback={<p className="soft p-6">Carregando escalação…</p>}>
+    <Suspense fallback={<LineupSkeleton />}>
       <Content params={params} />
     </Suspense>
   );

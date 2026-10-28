@@ -1,81 +1,64 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { LinkButton, EmptyState } from "@/components/ui";
+import { listMatches, type MatchSummary } from "@/lib/data";
 
-type Recent = { id: string; title: string };
-const KEY = "recent-matches";
+const STATUS: Record<MatchSummary["status"], string> = { lineup: "Escalação", live: "Ao vivo", finished: "Encerrado" };
+
+async function MatchList() {
+  let matches: MatchSummary[];
+  try {
+    matches = await listMatches();
+  } catch {
+    return (
+      <p role="alert" className="rounded-2xl border border-red-400/40 bg-red-500/10 p-4 text-red-200">
+        Não foi possível carregar os jogos. Verifique a conexão e o .env.local, e recarregue.
+      </p>
+    );
+  }
+  if (matches.length === 0) return <EmptyState>Nenhum jogo ainda. Crie o primeiro no botão acima.</EmptyState>;
+  return (
+    <ul className="flex flex-col gap-3">
+      {matches.map((m) => (
+        <li key={m.id}>
+          <Link
+            href={m.status === "lineup" ? `/jogos/${m.id}/escalacao` : `/jogos/${m.id}`}
+            className="flex min-h-20 items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 transition-[transform,background-color] duration-100 active:scale-[0.985] active:bg-white/15"
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-xl font-bold">
+                {m.home_name} x {m.away_name}
+              </span>
+              <span className="soft block truncate text-base">
+                {[m.competition, new Date(m.created_at).toLocaleDateString("pt-BR")].filter(Boolean).join(" · ")}
+              </span>
+            </span>
+            <span
+              className={`shrink-0 rounded-full border px-3 py-1 text-sm font-semibold ${
+                m.status === "live" ? "border-accent text-accent" : "border-white/20 text-white/60"
+              }`}
+            >
+              {STATUS[m.status]}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function Home() {
-  const router = useRouter();
-  const [home, setHome] = useState("");
-  const [away, setAway] = useState("");
-  const [referees, setReferees] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [recent, setRecent] = useState<Recent[]>([]);
-
-  useEffect(() => {
-    try {
-      setRecent(JSON.parse(localStorage.getItem(KEY) ?? "[]"));
-    } catch {}
-  }, []);
-
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    const { data, error } = await supabase
-      .from("matches")
-      .insert({ home_name: home.trim(), away_name: away.trim(), referees: referees.trim() })
-      .select("id")
-      .single();
-    if (error || !data) {
-      setError(error?.message ?? "Erro ao criar o jogo");
-      setBusy(false);
-      return;
-    }
-    try {
-      const next = [{ id: data.id, title: `${home.trim()} x ${away.trim()}` }, ...recent].slice(0, 10);
-      localStorage.setItem(KEY, JSON.stringify(next));
-    } catch {}
-    router.push(`/jogo/${data.id}/escalacao`);
-  }
-
   return (
-    <main className="mx-auto w-full max-w-2xl p-6 flex flex-col gap-8">
-      <h1 className="text-4xl font-extrabold">Novo jogo</h1>
-      <form onSubmit={create} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-2">
-          Time da casa
-          <input required value={home} onChange={(e) => setHome(e.target.value)} placeholder="Ex.: Flamengo" />
-        </label>
-        <label className="flex flex-col gap-2">
-          Time visitante
-          <input required value={away} onChange={(e) => setAway(e.target.value)} placeholder="Ex.: Vasco" />
-        </label>
-        <label className="flex flex-col gap-2">
-          Árbitros
-          <input value={referees} onChange={(e) => setReferees(e.target.value)} placeholder="Árbitro, auxiliares, VAR…" />
-        </label>
-        {error && <p className="text-red-400">{error}</p>}
-        <button className="btn btn-primary text-2xl min-h-16" disabled={busy}>
-          {busy ? "Criando…" : "Criar jogo e cadastrar escalação"}
-        </button>
-      </form>
-
-      {recent.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-2xl font-bold">Jogos recentes (neste aparelho)</h2>
-          {recent.map((r) => (
-            <Link key={r.id} href={`/jogo/${r.id}`} className="btn flex items-center">
-              {r.title}
-            </Link>
-          ))}
-        </section>
-      )}
+    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
+      <header className="flex flex-col gap-4">
+        <h1 className="text-4xl font-extrabold tracking-tight">Jogos</h1>
+        <LinkButton href="/jogos/novo" variant="primary" className="!min-h-16 !text-2xl">
+          + Novo jogo
+        </LinkButton>
+      </header>
+      <Suspense fallback={<p className="soft">Carregando jogos…</p>}>
+        <MatchList />
+      </Suspense>
     </main>
   );
 }
